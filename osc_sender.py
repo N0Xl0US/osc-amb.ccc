@@ -23,3 +23,6 @@ def send_perc_trig(perc_trig):
 
 def send_perc_intensity(intensity):
     client.send_message("/perc_intensity", intensity)
+
+def send_modspeed(mod_speed):
+    client.send_message("/mod_speed", mod_speed)
