@@ -20,7 +20,7 @@ This project generates ambient music in SuperCollider, driven by real-time weath
    ```bash
    pip install -r requirement.txt
    ```
-3. Install [SuperCollider](https://supercollider.github.io/download) if you haven't already.
+3. Install [SuperCollider](https://supercollider.github.io/download)
 
 ## Configuration
 Edit `config.py` to set your desired location and OSC connection:
@@ -54,4 +54,4 @@ Edit `config.py` to set your desired location and OSC connection:
 - The script prints weather and sound parameters to the console for monitoring.
 
 ## License
-MIT License (add your own if needed) 
+[MIT License](LICENSE)
