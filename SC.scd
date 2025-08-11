@@ -2,71 +2,147 @@ s.boot;
 
 (
 SynthDef(\ambientHeaven, {
-    |freq = 220, amp = 0.1, cutoff = 2000, pan = 0, reverbMix = 0.5, modSpeed = 0.07|
-    var env, slowLFO, detune, shimmer, body, air, noise, lfoPan, sig, reverb;
-    // Envelope with a slower attack & longer release for lushness
-    env = EnvGen.kr(Env.asr(5, 1, 8), doneAction: 2);
-    // Slow modulation to create subtle movement
+    |freq = 220, amp = 0.1, cutoff = 2500, pan = 0, reverbMix = 0.6, modSpeed = 0.05,
+      shimmerMix = 0.45, chorusDepth = 0.012, chorusRate = 0.12, width = 0.95,
+      reverbRoom = 0.95, reverbDamp = 0.35, airFreq = 9500, airGain = 5, hp = 90,
+      preDelay = 0.035|
+    var env, slowLFO, brightLFO, sines, baseSaw, fifthSaw, octaveSaw, padCore, airTex;
+    var lfoPan, preFX, chorus, wetIn, reverb, shimmerOct, shimmerFifth, wet, dry, outSig;
+
+    // Envelope for huge, slow pad
+    env = EnvGen.kr(Env.asr(8, 1, 12), doneAction: 2);
+
+    // Motion and brightness drift
     slowLFO = SinOsc.kr(modSpeed, 0, 0.02, 1);
-    // Detuned harmonic sources (blend of sine & richer waves)
-    detune = [0.99, 1.0, 1.01, 0.503, 1.498] * slowLFO;
-    shimmer = Mix.fill(detune.size, { |i|
-        Mix([
-            SinOsc.ar(freq * detune[i], 0, amp / detune.size),
-            LFTri.ar(freq * detune[i] * 2, 0, amp / (2 * detune.size)),
-            Blip.ar(freq * detune[i], 3 + i, amp / (3 * detune.size))
-        ])
+    brightLFO = SinOsc.kr(0.02).range(0.7, 1.3);
+
+    // Analog-style supersaw stacks: root, fifth, octave
+    baseSaw = Mix.fill(7, { |i|
+        var det = (i - 3) * 0.004 + (SinOsc.kr(0.03 + (i * 0.005)).range(-0.0008, 0.0008));
+        VarSaw.ar(freq * (1 + det) * slowLFO, 0, 0.7, amp * 0.08)
     });
-    // Filter shimmer for airiness
-    air = BPF.ar(shimmer, cutoff, 0.4);
-    // Add subtle filtered noise for texture
-    noise = BPF.ar(WhiteNoise.ar(amp * 0.2), cutoff * 1.5, 0.2);
-    // Stereo auto-panning
-    lfoPan = SinOsc.kr(0.03).range(-0.7, 0.7);
-    sig = Pan2.ar(air + noise, lfoPan);
-    // Reverb for heavenly spatial wash
-    reverb = FreeVerb.ar(sig, reverbMix, 0.8, 0.2); // FIXED: FreeVerb instead of JPverb
-    // Dry/wet blend
-    sig = XFade2.ar(sig, reverb, reverbMix * 2 - 1);
-    Out.ar(0, sig * env);
+    fifthSaw = Mix.fill(5, { |i|
+        var det = (i - 2) * 0.0035;
+        VarSaw.ar(freq * 1.5 * (1 + det), 0, 0.65, amp * 0.05)
+    });
+    octaveSaw = Mix.fill(5, { |i|
+        var det = (i - 2) * 0.003;
+        VarSaw.ar(freq * 2 * (1 + det), 0, 0.6, amp * 0.04)
+    });
+    sines = SinOsc.ar(freq * [1, 2], 0, amp * [0.03, 0.02]);
+    padCore = baseSaw + fifthSaw + octaveSaw + Mix(sines);
+    // Gentle dynamic lowpass tilt
+    padCore = RLPF.ar(padCore, (cutoff * brightLFO).clip(200, 18000), 0.35);
+
+    // Air layer (very subtle)
+    airTex = BPF.ar(WhiteNoise.ar(amp * 0.06), cutoff * 1.8, 0.2);
+
+    // Stereo spread + slow autopan
+    lfoPan = SinOsc.kr(0.018).range(-0.55, 0.55) + pan;
+    preFX = Splay.ar([padCore + airTex], spread: width, level: 1.0);
+    preFX = Balance2.ar(preFX[0], preFX[1], lfoPan.max(-1).min(1));
+
+    // Subtle chorus before reverb
+    chorus = preFX + DelayC.ar(preFX, 0.03, SinOsc.kr(chorusRate).range(0.001, chorusDepth));
+
+    // Predelay then fully-wet verb; blend later
+    wetIn = DelayN.ar(chorus, 0.1, preDelay);
+    reverb = FreeVerb.ar(wetIn, 1.0, reverbRoom, reverbDamp);
+
+    // Shimmer: octave + fifth
+    shimmerOct = PitchShift.ar(reverb, 0.25, 2.0, 0.01, 0.02);
+    shimmerFifth = PitchShift.ar(reverb, 0.25, 1.5, 0.01, 0.02);
+    wet = (reverb * (1 - shimmerMix)) + ((shimmerOct * 0.7 + shimmerFifth * 0.3) * shimmerMix);
+
+    dry = chorus;
+    outSig = XFade2.ar(dry, wet, (reverbMix * 2 - 1));
+
+    // Heavenly tone shaping
+    outSig = HPF.ar(outSig, hp);
+    outSig = BHiShelf.ar(outSig, airFreq, 0.7, airGain);
+    outSig = Compander.ar(outSig, outSig, 0.5, 1, 0.2, 0.01, 0.2);
+    Out.ar(0, Limiter.ar(outSig * env, 0.95));
 }).add;
 
 
 
 SynthDef(\dnbDrums, {
-    |kickAmp = 0.6, snareAmp = 0.4, hatAmp = 0.2, bpm = 172, masterAmp = 0.4|
+    |kickAmp = 0.6, snareAmp = 0.4, hatAmp = 0.2, bpm = 172, masterAmp = 0.4,
+      patternVar = 0.1, fillProb = 0.4, hatDensity = 0.85|
 
-    var trig, hatTrig, glitchTrig, kick, snare, hat, glitch, out;
-    var beatDur, kickSeq, snareSeq, kickPat, snarePat;
-    var bpmMod, dynamicBPM;
+    var trig16, barTrig, barIndex, hatTrig, glitchTrig, kick, snare, hat, glitch, out;
+    var step, bpmMod, dynamicBPM;
+    var kickPatterns, snarePatterns, kickSel, snareSel;
+    var kickAddMask, kickRemoveMask, kickVar;
+    var snareAddMask, snareRemoveMask, snareVarNormal, snareFillArray, isFillBar, fillRand, fillOn;
+    var kickStep, snareStepNormal, snareStepFill, snareStep, kickTrig, snareTrig;
 
     // Slight bpm modulation to mimic tempo drift
     bpmMod = LFNoise1.kr(0.05).range(-1, 1);
     dynamicBPM = bpm + bpmMod;
-    beatDur = 60 / dynamicBPM;
 
-    // Beat clocks
-    trig = Impulse.kr(dynamicBPM / 60 * 2); // 1/8 step
-    hatTrig = Dust.kr(16);  // irregular hats instead of fixed impulses
+    // Clocks
+    trig16 = Impulse.kr(dynamicBPM / 60 * 4); // 1/16 grid
+    barTrig = Impulse.kr((dynamicBPM / 60) / 4); // once per 4/4 bar
+    barIndex = PulseCount.kr(barTrig) % 4;
     glitchTrig = Dust.kr(4); // sparse glitch triggers
+    step = PulseCount.kr(trig16) % 16; // step index 0..15
 
-    // Rhythmic patterns
-    kickSeq = Dseq([1, 0, 0, 1, 0, 1, 0, 0], inf);
-    snareSeq = Dseq([0, 0, 1, 0, 1, 0, 0, 0], inf);
-    kickPat = Demand.kr(trig, 0, kickSeq);
-    snarePat = Demand.kr(trig, 0, snareSeq);
+    // 4-bar pattern cycle (16 steps each)
+    kickPatterns = [
+        [1, 0, 0, 1,  0, 0, 1, 0,  1, 0, 0, 1,  0, 1, 0, 0],
+        [1, 0, 0, 1,  0, 1, 0, 0,  1, 0, 1, 0,  0, 1, 0, 0],
+        [1, 0, 0, 1,  0, 0, 1, 0,  1, 0, 0, 0,  1, 0, 1, 0],
+        [1, 0, 1, 0,  0, 1, 0, 0,  1, 0, 0, 1,  0, 1, 0, 0]
+    ];
+    snarePatterns = [
+        [0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0],
+        [0, 0, 1, 0,  0, 1, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0],
+        [0, 0, 1, 0,  0, 0, 1, 0,  0, 1, 1, 0,  0, 0, 1, 0],
+        [0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0,  0, 1, 1, 0]
+    ];
+    kickSel = Array.fill(16, { |i|
+        Select.kr(barIndex, [kickPatterns[0][i], kickPatterns[1][i], kickPatterns[2][i], kickPatterns[3][i]])
+    });
+    snareSel = Array.fill(16, { |i|
+        Select.kr(barIndex, [snarePatterns[0][i], snarePatterns[1][i], snarePatterns[2][i], snarePatterns[3][i]])
+    });
+
+    // Per-bar probabilistic variations (subtle)
+    kickAddMask = Array.fill(16, { TRand.kr(0.0, 1.0, barTrig) < patternVar });
+    kickRemoveMask = Array.fill(16, { TRand.kr(0.0, 1.0, barTrig) < (patternVar * 0.6) });
+    kickVar = (kickSel + kickAddMask - kickRemoveMask).clip(0, 1);
+
+    snareAddMask = Array.fill(16, { TRand.kr(0.0, 1.0, barTrig) < (patternVar * 0.7) });
+    snareRemoveMask = Array.fill(16, { TRand.kr(0.0, 1.0, barTrig) < (patternVar * 0.3) });
+    snareVarNormal = (snareSel + snareAddMask - snareRemoveMask).clip(0, 1);
+
+    // Occasional snare fill on bar 4
+    snareFillArray = [0, 0, 0, 0,  0, 0, 0, 0,  0, 1, 0, 1,  0, 1, 1, 1];
+    isFillBar = Select.kr(barIndex, [0, 0, 0, 1]);
+    fillRand = (TRand.kr(0.0, 1.0, barTrig) < fillProb);
+    fillOn = isFillBar * fillRand; // 0 or 1 as UGen
+
+    // Step values and triggers
+    kickStep = Select.kr(step, kickVar);
+    snareStepNormal = Select.kr(step, snareVarNormal);
+    snareStepFill = Select.kr(step, snareFillArray);
+    snareStep = snareStepNormal + (snareStepFill - snareStepNormal) * fillOn;
+    kickTrig = trig16 * kickStep;
+    snareTrig = trig16 * snareStep;
 
     // Kick drum
-    kick = Decay2.kr(kickPat, 0.005, 0.25) *
+    kick = Decay2.kr(kickTrig, 0.005, 0.25) *
         SinOsc.ar(50, 0, kickAmp) *
-        EnvGen.kr(Env.perc(0.01, 0.15), kickPat);
+        EnvGen.kr(Env.perc(0.005, 0.12), kickTrig);
 
     // Snare
-    snare = Decay2.kr(snarePat, 0.004, 0.18) *
-        (PinkNoise.ar(0.4) + SinOsc.ar(180, 0, 0.2)) * snareAmp;
+    snare = Decay2.kr(snareTrig, 0.003, 0.18) *
+        (PinkNoise.ar(0.5) + SinOsc.ar(180, 0, 0.2)) * snareAmp;
 
-    // Hi-hats with timing + filter variation
-    hat = Decay2.kr(hatTrig, 0.002, 0.04) *
+    // Hi-hats: 1/16 base with density control and per-hit variation
+    hatTrig = trig16 * (TRand.kr(0.0, 1.0, trig16) < hatDensity);
+    hat = Decay2.kr(hatTrig, 0.002, 0.045) *
         BPF.ar(WhiteNoise.ar(0.2), TExpRand.kr(6000, 13000, hatTrig), 0.3) *
         TRand.kr(0.3, 1.0, hatTrig) * hatAmp;
 
