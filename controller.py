@@ -19,6 +19,12 @@ def run_loop():
             freq = generate_microtonal_freq()
         else:
             freq = just_intonation()
+
+        freq_min, freq_max = config.FREQ_RANGE
+        if freq < freq_min:
+            freq = freq_min
+        elif freq > freq_max:
+            freq = freq_max
         
         amp = scale(light, 0, 1, *config.AMP_RANGE)
         reverb = scale(humidity, 0, 1, 0, 1)

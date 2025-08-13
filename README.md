@@ -18,7 +18,7 @@ This project generates ambient music in SuperCollider, driven by real-time weath
 1. Clone this repository.
 2. Install Python dependencies:
    ```bash
-   pip install -r requirement.txt
+   pip install -r requirements.txt
    ```
 3. Install [SuperCollider](https://supercollider.github.io/download)
 
@@ -46,7 +46,7 @@ Edit `config.py` to set your desired location and OSC connection:
 - `osc_sender.py`: Sends OSC messages to SuperCollider.
 - `config.py`: Configuration for location and OSC connection.
 - `SC.scd`: SuperCollider script for synth definitions and OSC responders.
-- `requirement.txt`: Python dependencies.
+- `requirements.txt`: Python dependencies.
 
 ## Notes
 - No API key is required for weather data (uses Open-Meteo).

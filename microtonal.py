@@ -1,5 +1,4 @@
 import random
-import math
 
 def generate_microtonal_freq(base=440, steps=10):
     ratio = 2 ** (1 / steps)
